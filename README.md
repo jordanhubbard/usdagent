@@ -1,3 +1,5 @@
+NOTE:  This is a test project only!  It exists just to test some workflows and agent assignments over slack.  Please ignore unless you like looking at in-flight demos of agentic coding flows!
+
 # usdagent
 
 **USD Asset Generation API** — creates USD assets from text descriptions via API, supports iterative refinement, web UI with Google Drive integration.
