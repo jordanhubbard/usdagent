@@ -22,8 +22,10 @@ def test_create_asset():
     )
     assert resp.status_code == 202
     data = resp.json()
-    assert data["status"] == "pending"
+    # Generation runs synchronously, so status is "ready" on return
+    assert data["status"] == "ready"
     assert "id" in data
+    assert data["url"] is not None
 
 
 def test_get_asset_not_found():

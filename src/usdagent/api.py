@@ -10,6 +10,8 @@ from fastapi import FastAPI, HTTPException, Header
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
+from usdagent.usd_generator import generate_asset
+
 app = FastAPI(
     title="usdagent",
     description="USD Asset Generation API",
@@ -90,7 +92,18 @@ async def create_asset(
         "completed_at": None,
     }
     _assets[asset_id] = record
-    # TODO: enqueue generation job
+
+    # Run generation synchronously (async queue is a future enhancement)
+    try:
+        record["status"] = "generating"
+        out_path = generate_asset(asset_id, req.description, req.options.model_dump())
+        record["status"] = "ready"
+        record["url"] = str(out_path)
+        record["completed_at"] = datetime.now(tz=timezone.utc)
+    except Exception as exc:  # noqa: BLE001
+        record["status"] = "error"
+        record["url"] = None
+
     return AssetResponse(**record)
 
 
@@ -134,7 +147,21 @@ async def refine_asset(
         "completed_at": None,
     }
     _assets[new_id] = record
-    # TODO: enqueue refinement job referencing parent asset
+
+    # Build refined description combining parent context with new feedback
+    refined_description = f"{req.feedback} (refined from: {parent.get('description', '')})"
+
+    # Run generation synchronously
+    try:
+        record["status"] = "generating"
+        out_path = generate_asset(new_id, refined_description, req.options.model_dump())
+        record["status"] = "ready"
+        record["url"] = str(out_path)
+        record["completed_at"] = datetime.now(tz=timezone.utc)
+    except Exception as exc:  # noqa: BLE001
+        record["status"] = "error"
+        record["url"] = None
+
     return AssetResponse(**record)
 
 

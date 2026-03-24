@@ -4,7 +4,10 @@ pydantic>=2.6.0
 httpx>=0.27.0
 pytest>=8.0.0
 pytest-asyncio>=0.23.0
-# OpenUSD Python bindings (install separately via pip install usd-core or build from source)
+# OpenUSD Python bindings — install separately (not on PyPI for all platforms).
+# Option 1 (Linux/macOS x86_64):  pip install usd-core>=24.3
+# Option 2 (any platform):        build from source — https://github.com/PixarAnimationStudios/OpenUSD
+# The service runs without pxr using a string-template fallback.
 # usd-core>=24.3
 # Google Drive integration
 google-auth>=2.28.0
