@@ -6,11 +6,13 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Header
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.responses import HTMLResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel
 
 from usdagent.usd_generator import generate_asset
+from usdagent.auth import verify_api_key, get_current_user, authenticate_user, _create_access_token
 
 app = FastAPI(
     title="usdagent",
@@ -75,7 +77,7 @@ async def health() -> dict[str, str]:
 @app.post("/assets", status_code=202, response_model=AssetResponse)
 async def create_asset(
     req: CreateAssetRequest,
-    x_api_key: str = Header(...),
+    _key: str = Depends(verify_api_key),
 ) -> AssetResponse:
     """Create a new USD asset from a text description."""
     # TODO: validate API key
@@ -110,7 +112,7 @@ async def create_asset(
 @app.get("/assets/{asset_id}", response_model=AssetResponse)
 async def get_asset(
     asset_id: str,
-    x_api_key: str = Header(...),
+    _key: str = Depends(verify_api_key),
 ) -> AssetResponse:
     """Retrieve an asset and its generation status."""
     # TODO: validate API key
@@ -124,7 +126,7 @@ async def get_asset(
 async def refine_asset(
     asset_id: str,
     req: RefineAssetRequest,
-    x_api_key: str = Header(...),
+    _key: str = Depends(verify_api_key),
 ) -> AssetResponse:
     """Iteratively refine an existing asset."""
     # TODO: validate API key
@@ -163,6 +165,22 @@ async def refine_asset(
         record["url"] = None
 
     return AssetResponse(**record)
+
+
+@app.post("/auth/token")
+async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> dict[str, str]:
+    """Obtain a JWT access token."""
+    username = authenticate_user(form_data.username, form_data.password)
+    if not username:
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+    token = _create_access_token(username)
+    return {"access_token": token, "token_type": "bearer"}
+
+
+@app.get("/auth/me")
+async def auth_me(current_user: str = Depends(get_current_user)) -> dict[str, str]:
+    """Return info about the current authenticated user."""
+    return {"username": current_user}
 
 
 @app.get("/ui", response_class=HTMLResponse)
