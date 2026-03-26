@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from usdagent.usd_generator import generate_asset
 from usdagent.auth import verify_api_key, get_current_user, authenticate_user, _create_access_token
+from usdagent.drive import router as drive_router, upload_to_drive, _GOOGLE_CLIENT_ID
 
 app = FastAPI(
     title="usdagent",
@@ -25,6 +26,8 @@ app = FastAPI(
 
 _templates_dir = pathlib.Path(__file__).parent / "templates"
 _templates = Jinja2Templates(directory=str(_templates_dir))
+
+app.include_router(drive_router)
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +196,29 @@ async def auth_me(current_user: str = Depends(get_current_user)) -> dict[str, st
 async def list_assets(_key: str = Depends(verify_api_key)) -> list[AssetResponse]:
     """List all assets."""
     return [AssetResponse(**record) for record in _assets.values()]
+
+
+@app.post("/assets/{asset_id}/export/drive")
+async def export_to_drive(
+    asset_id: str,
+    _key: str = Depends(verify_api_key),
+) -> dict[str, str]:
+    """Export a USD asset to Google Drive."""
+    if not _GOOGLE_CLIENT_ID:
+        raise HTTPException(
+            status_code=501,
+            detail="Google Drive not configured. Set GOOGLE_CLIENT_ID to enable.",
+        )
+    record = _assets.get(asset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if record["status"] != "ready":
+        raise HTTPException(status_code=400, detail="Asset is not ready")
+    url = record.get("url")
+    if not url:
+        raise HTTPException(status_code=400, detail="Asset has no file")
+    import pathlib
+    return upload_to_drive(asset_id, pathlib.Path(url))
 
 
 @app.get("/ui", response_class=HTMLResponse)
