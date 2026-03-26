@@ -24,6 +24,11 @@ app = FastAPI(
 
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
+# Drive OAuth2 router — relative import keeps both modules in the same package namespace
+from .drive import router as _drive_router  # noqa: E402
+
+app.include_router(_drive_router)
+
 
 # ---------------------------------------------------------------------------
 # Request / response models

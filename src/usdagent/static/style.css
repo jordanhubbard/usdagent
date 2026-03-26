@@ -55,6 +55,30 @@ body {
   gap: 12px;
 }
 
+.drive-status {
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  display: none;
+}
+
+.drive-status.connected {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--success);
+}
+
+.drive-status.connected::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--success);
+  flex-shrink: 0;
+}
+
 .api-key-wrap {
   display: flex;
   align-items: center;

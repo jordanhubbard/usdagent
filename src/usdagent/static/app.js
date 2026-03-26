@@ -201,10 +201,71 @@ async function submitRefinement(assetId) {
 }
 
 // ---------------------------------------------------------------------------
-// Google Drive export (placeholder — OAuth in issue #6)
+// Google Drive integration
 // ---------------------------------------------------------------------------
-function exportToDrive(assetId) {
-  alert('Google Drive export is coming soon!\n\nOAuth integration will be implemented in issue #6.');
+let _driveAuthenticated = false;
+
+async function checkDriveStatus() {
+  try {
+    const resp = await fetch('/auth/google/status');
+    if (resp.ok) {
+      const data = await resp.json();
+      _driveAuthenticated = data.authenticated;
+    }
+  } catch (_) {
+    _driveAuthenticated = false;
+  }
+  updateDriveIndicator();
+}
+
+function updateDriveIndicator() {
+  const el = document.getElementById('drive-status');
+  if (!el) return;
+  if (_driveAuthenticated) {
+    el.textContent = 'Connected to Drive';
+    el.className = 'drive-status connected';
+  } else {
+    el.textContent = '';
+    el.className = 'drive-status';
+  }
+}
+
+async function exportToDrive(assetId) {
+  if (!_driveAuthenticated) {
+    sessionStorage.setItem('pendingDriveExport', assetId);
+    window.location.href = '/auth/google';
+    return;
+  }
+
+  try {
+    const resp = await fetch(`/assets/${assetId}/export/drive`, { method: 'POST' });
+    if (resp.status === 401) {
+      _driveAuthenticated = false;
+      updateDriveIndicator();
+      sessionStorage.setItem('pendingDriveExport', assetId);
+      window.location.href = '/auth/google';
+      return;
+    }
+    if (!resp.ok) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.detail || `HTTP ${resp.status}`);
+    }
+    const data = await resp.json();
+    const link = data.drive_url
+      ? ` — <a href="${escapeHtml(data.drive_url)}" target="_blank" rel="noopener">View in Drive</a>`
+      : '';
+    showToast(`Exported to Google Drive!${link}`, 'success');
+  } catch (err) {
+    showToast(`Drive export failed: ${err.message}`, 'error');
+  }
+}
+
+function resumePendingDriveExport() {
+  const assetId = sessionStorage.getItem('pendingDriveExport');
+  if (assetId && _driveAuthenticated) {
+    sessionStorage.removeItem('pendingDriveExport');
+    exportToDrive(assetId);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -318,4 +379,5 @@ document.addEventListener('DOMContentLoaded', () => {
   initApiKey();
   initKeyboardShortcuts();
   renderGallery();
+  checkDriveStatus().then(resumePendingDriveExport);
 });
