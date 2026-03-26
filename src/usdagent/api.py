@@ -4,19 +4,25 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Header
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from usdagent.usd_generator import generate_asset
+
+_STATIC_DIR = Path(__file__).parent / "static"
 
 app = FastAPI(
     title="usdagent",
     description="USD Asset Generation API",
     version="0.1.0",
 )
+
+app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 # ---------------------------------------------------------------------------
@@ -165,62 +171,7 @@ async def refine_asset(
     return AssetResponse(**record)
 
 
-@app.get("/ui", response_class=HTMLResponse)
-async def web_ui() -> str:
-    """Basic web UI for asset viewer and Google Drive export."""
-    # TODO: replace with proper template
-    return """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>usdagent — USD Asset Viewer</title>
-  <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
-    h1 { color: #333; }
-    #generate-form { margin: 20px 0; }
-    textarea { width: 100%; height: 100px; }
-    button { padding: 8px 16px; background: #0066cc; color: white; border: none; cursor: pointer; }
-    #result { margin-top: 20px; padding: 10px; background: #f0f0f0; display: none; }
-  </style>
-</head>
-<body>
-  <h1>usdagent — USD Asset Viewer</h1>
-  <div id="generate-form">
-    <h2>Generate a USD Asset</h2>
-    <textarea id="description" placeholder="Describe your 3D asset..."></textarea>
-    <br><br>
-    <button onclick="generateAsset()">Generate</button>
-  </div>
-  <div id="result">
-    <h3>Result</h3>
-    <pre id="result-text"></pre>
-    <button onclick="exportToDrive()" style="background:#34a853">Export to Google Drive</button>
-  </div>
-  <script>
-    async function generateAsset() {
-      const desc = document.getElementById('description').value;
-      if (!desc) { alert('Please enter a description'); return; }
-      const resp = await fetch('/assets', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-API-Key': 'demo'},
-        body: JSON.stringify({description: desc})
-      });
-      const data = await resp.json();
-      document.getElementById('result').style.display = 'block';
-      document.getElementById('result-text').textContent = JSON.stringify(data, null, 2);
-      pollStatus(data.id);
-    }
-    async function pollStatus(id) {
-      const resp = await fetch('/assets/' + id, {headers: {'X-API-Key': 'demo'}});
-      const data = await resp.json();
-      document.getElementById('result-text').textContent = JSON.stringify(data, null, 2);
-      if (data.status === 'pending' || data.status === 'generating') {
-        setTimeout(() => pollStatus(id), 2000);
-      }
-    }
-    function exportToDrive() {
-      window.location.href = '/auth/google?next=' + encodeURIComponent(window.location.href);
-    }
-  </script>
-</body>
-</html>"""
+@app.get("/ui")
+async def web_ui() -> FileResponse:
+    """Serve the polished single-page asset viewer UI."""
+    return FileResponse(_STATIC_DIR / "index.html")

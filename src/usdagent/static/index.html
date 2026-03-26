@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>usdagent — USD Asset Viewer</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <h1><span>usd</span>agent</h1>
+    <div class="header-right">
+      <div class="api-key-wrap">
+        <label for="api-key">API Key</label>
+        <input type="password" id="api-key" placeholder="Enter API key" autocomplete="off">
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- Generate panel -->
+    <section class="generate-panel">
+      <h2>Generate a USD Asset</h2>
+      <div class="input-row">
+        <textarea
+          id="description"
+          placeholder="Describe your 3D asset… e.g. &quot;a red sphere with metallic finish&quot;"
+          rows="3"
+        ></textarea>
+        <button class="btn btn-primary" id="generate-btn" onclick="generateAsset()">
+          Generate
+        </button>
+      </div>
+      <div class="progress-bar" id="progress-bar">
+        <div class="progress-fill"></div>
+      </div>
+    </section>
+
+    <!-- Asset gallery -->
+    <section>
+      <div class="gallery-header">
+        <h2>Assets</h2>
+        <span class="badge" id="asset-count">0</span>
+      </div>
+
+      <div class="gallery-empty" id="gallery-empty">
+        <p>No assets yet. Generate one above!</p>
+      </div>
+
+      <div class="asset-grid" id="asset-grid" style="display:none"></div>
+    </section>
+  </main>
+
+  <!-- Toast container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

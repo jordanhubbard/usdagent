@@ -36,6 +36,31 @@ def test_get_asset_not_found():
     assert resp.status_code == 404
 
 
+def test_ui_serves_html():
+    """GET /ui should return the index.html with HTML content."""
+    resp = client.get("/ui")
+    assert resp.status_code == 200
+    assert "text/html" in resp.headers["content-type"]
+    assert b"usdagent" in resp.content
+
+
+def test_static_css_served():
+    """GET /static/style.css should return CSS content."""
+    resp = client.get("/static/style.css")
+    assert resp.status_code == 200
+    assert "text/css" in resp.headers["content-type"]
+    assert b"--bg" in resp.content
+
+
+def test_static_js_served():
+    """GET /static/app.js should return JavaScript content."""
+    resp = client.get("/static/app.js")
+    assert resp.status_code == 200
+    content_type = resp.headers["content-type"]
+    assert "javascript" in content_type or "text/plain" in content_type
+    assert b"generateAsset" in resp.content
+
+
 def test_create_and_get_asset():
     create_resp = client.post(
         "/assets",
