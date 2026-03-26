@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import os
+import pathlib
 import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from usdagent.usd_generator import generate_asset
@@ -19,6 +22,9 @@ app = FastAPI(
     description="USD Asset Generation API",
     version="0.1.0",
 )
+
+_templates_dir = pathlib.Path(__file__).parent / "templates"
+_templates = Jinja2Templates(directory=str(_templates_dir))
 
 
 # ---------------------------------------------------------------------------
@@ -183,62 +189,19 @@ async def auth_me(current_user: str = Depends(get_current_user)) -> dict[str, st
     return {"username": current_user}
 
 
+@app.get("/assets", response_model=list[AssetResponse])
+async def list_assets(_key: str = Depends(verify_api_key)) -> list[AssetResponse]:
+    """List all assets."""
+    return [AssetResponse(**record) for record in _assets.values()]
+
+
 @app.get("/ui", response_class=HTMLResponse)
-async def web_ui() -> str:
-    """Basic web UI for asset viewer and Google Drive export."""
-    # TODO: replace with proper template
-    return """<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>usdagent — USD Asset Viewer</title>
-  <style>
-    body { font-family: sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
-    h1 { color: #333; }
-    #generate-form { margin: 20px 0; }
-    textarea { width: 100%; height: 100px; }
-    button { padding: 8px 16px; background: #0066cc; color: white; border: none; cursor: pointer; }
-    #result { margin-top: 20px; padding: 10px; background: #f0f0f0; display: none; }
-  </style>
-</head>
-<body>
-  <h1>usdagent — USD Asset Viewer</h1>
-  <div id="generate-form">
-    <h2>Generate a USD Asset</h2>
-    <textarea id="description" placeholder="Describe your 3D asset..."></textarea>
-    <br><br>
-    <button onclick="generateAsset()">Generate</button>
-  </div>
-  <div id="result">
-    <h3>Result</h3>
-    <pre id="result-text"></pre>
-    <button onclick="exportToDrive()" style="background:#34a853">Export to Google Drive</button>
-  </div>
-  <script>
-    async function generateAsset() {
-      const desc = document.getElementById('description').value;
-      if (!desc) { alert('Please enter a description'); return; }
-      const resp = await fetch('/assets', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json', 'X-API-Key': 'demo'},
-        body: JSON.stringify({description: desc})
-      });
-      const data = await resp.json();
-      document.getElementById('result').style.display = 'block';
-      document.getElementById('result-text').textContent = JSON.stringify(data, null, 2);
-      pollStatus(data.id);
-    }
-    async function pollStatus(id) {
-      const resp = await fetch('/assets/' + id, {headers: {'X-API-Key': 'demo'}});
-      const data = await resp.json();
-      document.getElementById('result-text').textContent = JSON.stringify(data, null, 2);
-      if (data.status === 'pending' || data.status === 'generating') {
-        setTimeout(() => pollStatus(id), 2000);
-      }
-    }
-    function exportToDrive() {
-      window.location.href = '/auth/google?next=' + encodeURIComponent(window.location.href);
-    }
-  </script>
-</body>
-</html>"""
+async def web_ui(request: Request) -> HTMLResponse:
+    """Web UI for asset management."""
+    google_configured = bool(os.environ.get("GOOGLE_CLIENT_ID"))
+    return _templates.TemplateResponse(
+        "ui.html",
+        {"request": request, "google_configured": google_configured},
+    )
+
+
