@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Header
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -28,6 +29,31 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 from .drive import router as _drive_router  # noqa: E402
 
 app.include_router(_drive_router)
+
+
+# ---------------------------------------------------------------------------
+# API key auth middleware (Issue #5)
+# /ui and /static/* are exempt; all other routes require the key when
+# USDAGENT_API_KEY env var is set.
+# ---------------------------------------------------------------------------
+
+_EXEMPT_PREFIXES = ("/ui", "/static/", "/auth/", "/health", "/docs", "/openapi")
+
+
+@app.middleware("http")
+async def api_key_middleware(request: Request, call_next):  # type: ignore[return]
+    required_key = os.environ.get("USDAGENT_API_KEY", "")
+    if required_key:
+        path = request.url.path
+        exempt = any(path == p or path.startswith(p) for p in _EXEMPT_PREFIXES)
+        if not exempt:
+            provided = request.headers.get("X-API-Key", "")
+            if provided != required_key:
+                return JSONResponse(
+                    status_code=401,
+                    content={"detail": "Invalid or missing API key"},
+                )
+    return await call_next(request)
 
 
 # ---------------------------------------------------------------------------
@@ -86,10 +112,8 @@ async def health() -> dict[str, str]:
 @app.post("/assets", status_code=202, response_model=AssetResponse)
 async def create_asset(
     req: CreateAssetRequest,
-    x_api_key: str = Header(...),
 ) -> AssetResponse:
     """Create a new USD asset from a text description."""
-    # TODO: validate API key
     asset_id = str(uuid.uuid4())
     now = datetime.now(tz=timezone.utc)
     record: dict[str, Any] = {
@@ -121,10 +145,8 @@ async def create_asset(
 @app.get("/assets/{asset_id}", response_model=AssetResponse)
 async def get_asset(
     asset_id: str,
-    x_api_key: str = Header(...),
 ) -> AssetResponse:
     """Retrieve an asset and its generation status."""
-    # TODO: validate API key
     record = _assets.get(asset_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Asset not found")
@@ -135,10 +157,8 @@ async def get_asset(
 async def refine_asset(
     asset_id: str,
     req: RefineAssetRequest,
-    x_api_key: str = Header(...),
 ) -> AssetResponse:
     """Iteratively refine an existing asset."""
-    # TODO: validate API key
     parent = _assets.get(asset_id)
     if parent is None:
         raise HTTPException(status_code=404, detail="Asset not found")

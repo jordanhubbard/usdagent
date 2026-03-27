@@ -1,0 +1,14 @@
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - USDAGENT_API_KEY=${USDAGENT_API_KEY:-}
+    volumes:
+      - usdagent-assets:/tmp/usdagent-assets
+
+volumes:
+  usdagent-assets:
