@@ -269,6 +269,86 @@ function resumePendingDriveExport() {
 }
 
 // ---------------------------------------------------------------------------
+// Inline USD file preview
+// ---------------------------------------------------------------------------
+async function openUsdPreview(assetId) {
+  closeModal();
+
+  // Show modal immediately with loading state
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'usd-preview-modal';
+  overlay.innerHTML = `
+    <div class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="usd-preview-title">
+      <div class="modal-header">
+        <h3 id="usd-preview-title">USD File Preview</h3>
+        <div class="modal-header-actions">
+          <button class="btn btn-outline btn-sm" onclick="downloadUsd('${escapeHtml(assetId)}')">
+            ↓ Download
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="closeModal()">✕ Close</button>
+        </div>
+      </div>
+      <div id="usd-preview-body" class="usd-preview-body">
+        <div class="usd-preview-loading">
+          <span class="spinner"></span> Loading…
+        </div>
+      </div>
+    </div>
+  `;
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  document.body.appendChild(overlay);
+  document.getElementById('usd-preview-modal').querySelector('.modal').focus?.();
+
+  // Fetch the raw .usda content
+  try {
+    const resp = await fetch(`/assets/${assetId}/file`, {
+      headers: { 'X-API-Key': apiKey() }
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+
+    const body = document.getElementById('usd-preview-body');
+    body.innerHTML = `
+      <div class="usd-preview-meta">
+        <span class="usd-meta-tag">USDA</span>
+        <span class="usd-meta-size">${formatBytes(text.length)}</span>
+        <span class="usd-meta-lines">${text.split('\n').length} lines</span>
+      </div>
+      <pre class="usd-code"><code>${escapeHtml(text)}</code></pre>
+    `;
+  } catch (err) {
+    const body = document.getElementById('usd-preview-body');
+    body.innerHTML = `<p class="usd-preview-error">Failed to load USD file: ${escapeHtml(err.message)}</p>`;
+  }
+}
+
+async function downloadUsd(assetId) {
+  try {
+    const resp = await fetch(`/assets/${assetId}/file`, {
+      headers: { 'X-API-Key': apiKey() }
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const text = await resp.text();
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${assetId}.usda`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    showToast(`Download failed: ${err.message}`, 'error');
+  }
+}
+
+function formatBytes(n) {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+// ---------------------------------------------------------------------------
 // Rendering
 // ---------------------------------------------------------------------------
 function escapeHtml(str) {
@@ -330,6 +410,12 @@ function renderGallery() {
         </div>
         <div class="card-actions">
           ${isReady ? `
+            <a class="btn btn-outline btn-sm" href="/view/${id}" target="_blank" rel="noopener">
+              View 3D
+            </a>
+            <button class="btn btn-outline btn-sm" onclick="openUsdPreview('${id}')">
+              Preview USD
+            </button>
             <button class="btn btn-outline btn-sm"
               onclick="openRefineModal('${id}', '${desc.replace(/'/g, "\\'")}')">
               Refine
