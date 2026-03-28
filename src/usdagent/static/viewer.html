@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>usdagent — USD Viewer</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0f0f1a; color: #eee; font-family: system-ui, sans-serif; overflow: hidden; }
+    #canvas-container { width: 100vw; height: 100vh; }
+
+    #back-btn {
+      position: absolute; top: 14px; left: 14px;
+      background: rgba(0,0,0,0.55); backdrop-filter: blur(6px);
+      border: 1px solid rgba(255,255,255,0.15); color: #ddd;
+      padding: 6px 14px; border-radius: 6px; cursor: pointer;
+      font-size: 13px; text-decoration: none;
+    }
+    #back-btn:hover { background: rgba(255,255,255,0.12); }
+
+    #info {
+      position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.5); backdrop-filter: blur(6px);
+      padding: 6px 16px; border-radius: 20px;
+      font-size: 12px; color: #aaa; pointer-events: none; white-space: nowrap;
+    }
+
+    #overlay {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      pointer-events: none;
+    }
+    .spinner {
+      width: 44px; height: 44px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #7c8cf8;
+      border-radius: 50%;
+      animation: spin 0.75s linear infinite;
+      margin-bottom: 14px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #overlay-msg { font-size: 15px; color: #bbb; }
+    #overlay-detail { font-size: 12px; color: #ff6b6b; margin-top: 8px; max-width: 380px; text-align: center; }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="canvas-container"></div>
+  <a id="back-btn" href="/ui">&#8592; Back</a>
+  <div id="info">Drag to rotate &nbsp;·&nbsp; Scroll to zoom &nbsp;·&nbsp; Right-drag to pan</div>
+  <div id="overlay">
+    <div class="spinner"></div>
+    <div id="overlay-msg">Loading USD asset…</div>
+    <div id="overlay-detail"></div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const assetId = location.pathname.split('/').pop();
+    const fileUrl  = `/assets/${assetId}/file`;
+
+    // ── Renderer ──────────────────────────────────────────────────────────────
+    const container = document.getElementById('canvas-container');
+    const renderer  = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    container.appendChild(renderer.domElement);
+
+    // ── Scene ─────────────────────────────────────────────────────────────────
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0f0f1a);
+    scene.fog = new THREE.FogExp2(0x0f0f1a, 0.0008);
+
+    // ── Camera ────────────────────────────────────────────────────────────────
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 50000);
+    camera.position.set(200, 150, 200);
+
+    // ── Controls ──────────────────────────────────────────────────────────────
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.06;
+    controls.minDistance   = 1;
+    controls.maxDistance   = 20000;
+
+    // ── Lighting ──────────────────────────────────────────────────────────────
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+    const sun = new THREE.DirectionalLight(0xfff4e0, 1.4);
+    sun.position.set(300, 600, 300);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(2048, 2048);
+    sun.shadow.camera.near = 1; sun.shadow.camera.far = 5000;
+    sun.shadow.camera.left = sun.shadow.camera.bottom = -500;
+    sun.shadow.camera.right = sun.shadow.camera.top = 500;
+    scene.add(sun);
+    scene.add(new THREE.HemisphereLight(0x8899ff, 0x443322, 0.35));
+
+    // ── Grid ──────────────────────────────────────────────────────────────────
+    const grid = new THREE.GridHelper(1000, 40, 0x222244, 0x1a1a33);
+    scene.add(grid);
+
+    // ── Lightweight USDA parser ───────────────────────────────────────────────
+    // Parses USD ASCII format and extracts geometry primitives + display colours.
+    function parseUsda(text) {
+      const objects = [];
+
+      // Extract all prim blocks: def <Type> "<Name>" { ... }
+      // We walk the text looking for known geometry types.
+      const primRe = /def\s+(Sphere|Cube|Cylinder|Cone|Capsule|Mesh|Xform)\s+"([^"]+)"\s*\{/g;
+      let m;
+      while ((m = primRe.exec(text)) !== null) {
+        const type = m[1];
+        const name = m[2];
+        // Find matching closing brace for this block
+        let depth = 1, i = primRe.lastIndex;
+        while (i < text.length && depth > 0) {
+          if (text[i] === '{') depth++;
+          else if (text[i] === '}') depth--;
+          i++;
+        }
+        const block = text.slice(primRe.lastIndex, i - 1);
+        objects.push({ type, name, block });
+      }
+      return objects;
+    }
+
+    function extractNumber(block, key) {
+      const re = new RegExp(key + '\\s*=\\s*([\\d.eE+\\-]+)');
+      const m = re.exec(block);
+      return m ? parseFloat(m[1]) : null;
+    }
+
+    function extractVec3(block, key) {
+      const re = new RegExp(key + '\\s*=\\s*\\(([\\d.eE+\\-,\\s]+)\\)');
+      const m = re.exec(block);
+      if (!m) return null;
+      const parts = m[1].split(',').map(Number);
+      return parts.length === 3 ? parts : null;
+    }
+
+    function extractColour(block) {
+      // displayColor is stored as float3[] primvars:displayColor = [(r, g, b)]
+      const re = /primvars:displayColor\s*=\s*\[\s*\(([^)]+)\)/;
+      const m = re.exec(block);
+      if (!m) return null;
+      const parts = m[1].split(',').map(Number);
+      if (parts.length === 3) return new THREE.Color(...parts);
+      return null;
+    }
+
+    function extractTranslate(block) {
+      // xformOp:translate = (x, y, z)
+      return extractVec3(block, 'xformOp:translate');
+    }
+
+    function buildMesh(prim) {
+      let geo;
+      const b = prim.block;
+
+      switch (prim.type) {
+        case 'Sphere': {
+          const r = extractNumber(b, 'double radius') ?? 50;
+          geo = new THREE.SphereGeometry(r, 32, 32);
+          break;
+        }
+        case 'Cube': {
+          const size = extractNumber(b, 'double size') ?? 100;
+          geo = new THREE.BoxGeometry(size, size, size);
+          break;
+        }
+        case 'Cylinder': {
+          const r = extractNumber(b, 'double radius') ?? 50;
+          const h = extractNumber(b, 'double height') ?? 100;
+          geo = new THREE.CylinderGeometry(r, r, h, 32);
+          break;
+        }
+        case 'Cone': {
+          const r = extractNumber(b, 'double radius') ?? 50;
+          const h = extractNumber(b, 'double height') ?? 100;
+          geo = new THREE.ConeGeometry(r, h, 32);
+          break;
+        }
+        case 'Capsule': {
+          const r = extractNumber(b, 'double radius') ?? 25;
+          const h = extractNumber(b, 'double height') ?? 100;
+          // Three.js CapsuleGeometry: (radius, length, capSegs, radSegs)
+          geo = new THREE.CapsuleGeometry(r, h, 8, 16);
+          break;
+        }
+        default:
+          return null; // Xform/Mesh — skip for now
+      }
+
+      const colour = extractColour(b) ?? new THREE.Color(0x7c8cf8);
+      const mat = new THREE.MeshStandardMaterial({
+        color: colour,
+        roughness: 0.45,
+        metalness: 0.15,
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      const t = extractTranslate(b);
+      if (t) mesh.position.set(...t);
+
+      return mesh;
+    }
+
+    // ── Overlay helpers ───────────────────────────────────────────────────────
+    function hideOverlay() {
+      document.getElementById('overlay').style.display = 'none';
+    }
+    function showError(msg) {
+      document.querySelector('.spinner').style.display = 'none';
+      document.getElementById('overlay-msg').textContent = 'Failed to load asset';
+      document.getElementById('overlay-msg').style.color = '#ff6b6b';
+      document.getElementById('overlay-detail').textContent = msg;
+    }
+
+    // ── Load + parse USDA ─────────────────────────────────────────────────────
+    try {
+      const resp = await fetch(fileUrl, { headers: { 'X-API-Key': 'demo' } });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const text = await resp.text();
+
+      const prims = parseUsda(text);
+      const group = new THREE.Group();
+
+      for (const prim of prims) {
+        const mesh = buildMesh(prim);
+        if (mesh) group.add(mesh);
+      }
+
+      if (group.children.length === 0) {
+        // No recognised geometry — show a placeholder cube
+        const fallback = new THREE.Mesh(
+          new THREE.BoxGeometry(80, 80, 80),
+          new THREE.MeshStandardMaterial({ color: 0x7c8cf8, wireframe: true })
+        );
+        group.add(fallback);
+        document.getElementById('overlay-detail').textContent =
+          'No recognised geometry — showing placeholder. USDA may use unsupported prim types.';
+        document.querySelector('.spinner').style.display = 'none';
+      } else {
+        hideOverlay();
+      }
+
+      scene.add(group);
+
+      // Auto-fit camera
+      const box    = new THREE.Box3().setFromObject(group);
+      const size   = box.getSize(new THREE.Vector3()).length();
+      const center = box.getCenter(new THREE.Vector3());
+      controls.target.copy(center);
+      const dist = size * 1.8;
+      camera.position.copy(center).addScaledVector(
+        new THREE.Vector3(1, 0.6, 1).normalize(), dist
+      );
+      camera.near = size / 200;
+      camera.far  = size * 200;
+      camera.updateProjectionMatrix();
+      grid.scale.setScalar(Math.max(1, size / 200));
+      grid.position.y = box.min.y;
+      const half = size * 0.75;
+      sun.shadow.camera.left = sun.shadow.camera.bottom = -half;
+      sun.shadow.camera.right = sun.shadow.camera.top = half;
+      sun.shadow.camera.far = size * 4;
+      sun.shadow.camera.updateProjectionMatrix();
+      sun.position.setScalar(size);
+      controls.update();
+
+    } catch (err) {
+      showError(err.message);
+    }
+
+    // ── Render loop ───────────────────────────────────────────────────────────
+    function animate() {
+      requestAnimationFrame(animate);
+      controls.update();
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // ── Resize ────────────────────────────────────────────────────────────────
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
