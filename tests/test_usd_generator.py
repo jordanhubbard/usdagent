@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import uuid
 from pathlib import Path
+import uuid
 
 import pytest
 
