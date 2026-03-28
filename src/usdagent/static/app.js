@@ -165,8 +165,10 @@ function openRefineModal(assetId, description) {
 }
 
 function closeModal() {
-  const m = document.getElementById('refine-modal');
-  if (m) m.remove();
+  ['refine-modal', 'usd-preview-modal'].forEach(id => {
+    const m = document.getElementById(id);
+    if (m) m.remove();
+  });
 }
 
 async function submitRefinement(assetId) {
