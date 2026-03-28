@@ -1,6 +1,5 @@
 """Basic API tests for usdagent."""
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.usdagent.api import app

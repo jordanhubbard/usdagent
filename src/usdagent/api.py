@@ -135,7 +135,7 @@ async def create_asset(
         record["status"] = "ready"
         record["url"] = str(out_path)
         record["completed_at"] = datetime.now(tz=timezone.utc)
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         record["status"] = "error"
         record["url"] = None
 
@@ -189,7 +189,7 @@ async def refine_asset(
         record["status"] = "ready"
         record["url"] = str(out_path)
         record["completed_at"] = datetime.now(tz=timezone.utc)
-    except Exception as exc:  # noqa: BLE001
+    except Exception:  # noqa: BLE001
         record["status"] = "error"
         record["url"] = None
 

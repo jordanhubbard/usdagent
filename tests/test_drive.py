@@ -8,7 +8,6 @@ import uuid
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
 from fastapi.testclient import TestClient
 
 import src.usdagent.drive as drive_module
@@ -33,7 +32,9 @@ _FAKE_ENV = {
 # ---------------------------------------------------------------------------
 
 
-def _make_mock_flow(auth_url: str = "https://accounts.google.com/o/oauth2/auth?foo=bar") -> MagicMock:
+def _make_mock_flow(
+    auth_url: str = "https://accounts.google.com/o/oauth2/auth?foo=bar",
+) -> MagicMock:
     """Return a mock Flow whose authorization_url returns a deterministic state."""
     flow = MagicMock()
     flow.authorization_url.return_value = (auth_url, "test-state-123")
