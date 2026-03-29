@@ -41,7 +41,7 @@ Rules:
 - Use xformOp:translate to position parts relative to each other.
 - Use xformOp:scale where appropriate (e.g. to flatten a cube into a sash).
 - Keep geometry simple but recognisable. Prefer built-in primitives over Mesh.
-- Always set defaultPrim, upAxis = "Y", metersPerUnit = 0.01.
+- Always set defaultPrim, upAxis (use the value specified in the request, default "Y"), metersPerUnit = 0.01.
 - The root prim must be def Xform "Asset".
 - Output valid USD ASCII that can be parsed by a standard USD parser.
 """
@@ -103,9 +103,13 @@ def _extract_usda(raw: str) -> str:
 def _generate_with_llm(asset_id: str, description: str, options: dict[str, Any]) -> Path:
     """Generate a .usda file using the local ollama LLM."""
     scale = float(options.get("scale", 1.0))
+    up_axis = options.get("up_axis", "Y")
+    units = options.get("units", "centimeters")
+    mpu = _units_to_meters(units)
     prompt = f"Generate a USD asset for: {description}"
     if scale != 1.0:
         prompt += f" (scale all dimensions by {scale})"
+    prompt += f" Use upAxis = \"{up_axis}\" and metersPerUnit = {mpu} in the layer metadata."
 
     raw = _call_ollama(prompt)
     usda = _extract_usda(raw)
