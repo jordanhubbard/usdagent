@@ -150,18 +150,31 @@
     }
 
     function extractColour(block) {
-      // displayColor is stored as float3[] primvars:displayColor = [(r, g, b)]
-      const re = /primvars:displayColor\s*=\s*\[\s*\(([^)]+)\)/;
-      const m = re.exec(block);
-      if (!m) return null;
-      const parts = m[1].split(',').map(Number);
-      if (parts.length === 3) return new THREE.Color(...parts);
+      // Handle both syntaxes:
+      //   Vec3f[] primvars:displayColor = [(r, g, b)]      ← fallback template
+      //   color3f[] primvars:displayColor = [(r, g, b)]    ← LLM output variant A
+      //   primvars:displayColor = color3f[(r, g, b)]       ← LLM output variant B
+      const patterns = [
+        /primvars:displayColor\s*=\s*(?:color3f|Vec3f)?\s*\[\s*\(([^)]+)\)/,
+        /primvars:displayColor\s*=\s*(?:color3f|Vec3f)\s*\[\s*\(([^)]+)\)/,
+        /displayColor\s*=\s*\[\s*\(([^)]+)\)/,
+      ];
+      for (const re of patterns) {
+        const m = re.exec(block);
+        if (m) {
+          const parts = m[1].split(',').map(s => parseFloat(s.trim()));
+          if (parts.length === 3 && parts.every(isFinite)) return new THREE.Color(...parts);
+        }
+      }
       return null;
     }
 
     function extractTranslate(block) {
-      // xformOp:translate = (x, y, z)
       return extractVec3(block, 'xformOp:translate');
+    }
+
+    function extractScale(block) {
+      return extractVec3(block, 'xformOp:scale');
     }
 
     function buildMesh(prim) {
@@ -214,6 +227,9 @@
 
       const t = extractTranslate(b);
       if (t) mesh.position.set(...t);
+
+      const s = extractScale(b);
+      if (s) mesh.scale.set(...s);
 
       return mesh;
     }
