@@ -18,10 +18,10 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: make install-dev
 
       - name: Run tests
-        run: PYTHONPATH=src pytest tests/ -v
+        run: make test
 
       - name: Run ruff lint
-        run: ruff check src/ tests/
+        run: make lint

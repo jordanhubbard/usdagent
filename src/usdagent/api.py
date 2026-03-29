@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -37,7 +37,7 @@ app.include_router(_drive_router)
 # USDAGENT_API_KEY env var is set.
 # ---------------------------------------------------------------------------
 
-_EXEMPT_PREFIXES = ("/ui", "/static/", "/auth/", "/health", "/docs", "/openapi")
+_EXEMPT_PREFIXES = ("/ui", "/view/", "/static/", "/auth/", "/health", "/docs", "/openapi")
 
 
 @app.middleware("http")
@@ -200,3 +200,38 @@ async def refine_asset(
 async def web_ui() -> FileResponse:
     """Serve the polished single-page asset viewer UI."""
     return FileResponse(_STATIC_DIR / "index.html")
+
+
+@app.get("/assets/{asset_id}/file")
+async def get_asset_file(asset_id: str) -> FileResponse:
+    """Serve the raw .usda file for an asset."""
+    record = _assets.get(asset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    if record["status"] != "ready" or not record["url"]:
+        raise HTTPException(status_code=404, detail="Asset file not ready")
+    path = Path(record["url"])
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Asset file not found on disk")
+    return FileResponse(path, media_type="text/plain", filename=f"{asset_id}.usda")
+
+
+@app.get("/view/{asset_id}", response_class=HTMLResponse)
+async def view_asset(asset_id: str) -> HTMLResponse:
+    """Serve the Three.js USD viewer for a single asset.
+
+    COOP/COEP headers are set here (and only here) so that the Three.js
+    USDLoader WASM can use SharedArrayBuffer without affecting OAuth flows
+    on the rest of the app.
+    """
+    record = _assets.get(asset_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Asset not found")
+    html = (_STATIC_DIR / "viewer.html").read_text()
+    return HTMLResponse(
+        content=html,
+        headers={
+            "Cross-Origin-Embedder-Policy": "require-corp",
+            "Cross-Origin-Opener-Policy": "same-origin",
+        },
+    )

@@ -17,14 +17,16 @@ Key features:
 ## Quick Start
 
 ```bash
-# Install dependencies
-pip install -r requirements.txt
+# Create venv and install dependencies
+make install-dev
 
-# Run the API server
-uvicorn src.usdagent.api:app --reload
+# Run the API server with auto-reload
+make dev
 
 # Open http://localhost:8000/ui for the web UI
 ```
+
+Run `make help` to see all available targets.
 
 ## Google Drive Setup
 
