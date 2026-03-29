@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>usdagent — USD Asset Studio</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen">
+
+<!-- Login Modal -->
+<div id="login-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+    <h2 class="text-2xl font-bold text-gray-800 mb-6">Sign In</h2>
+    <div id="login-error" class="hidden mb-4 p-3 bg-red-100 text-red-700 rounded"></div>
+    <div class="space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Username</label>
+        <input id="login-username" type="text" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="admin">
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+        <input id="login-password" type="password" class="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="changeme">
+      </div>
+      <button onclick="doLogin()" class="w-full bg-blue-600 text-white py-2 rounded font-medium hover:bg-blue-700 transition">Sign In</button>
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="bg-white shadow-sm">
+  <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-gray-900">usdagent</h1>
+    <div class="flex items-center gap-4">
+      <span id="user-badge" class="hidden text-sm text-gray-600"></span>
+      <button onclick="logout()" id="logout-btn" class="hidden text-sm text-red-600 hover:underline">Sign out</button>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-7xl mx-auto px-4 py-8">
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+    <!-- Left: Generate + Refine -->
+    <div class="lg:col-span-1 space-y-6">
+
+      <!-- Generate Form -->
+      <div class="bg-white rounded-lg shadow p-6">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Generate Asset</h2>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+            <textarea id="gen-description" rows="4" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Describe your 3D asset (e.g. 'a large blue sphere')"></textarea>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Scale</label>
+              <input id="gen-scale" type="number" value="1.0" step="0.1" min="0.1" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Up Axis</label>
+              <select id="gen-up-axis" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="Y" selected>Y</option>
+                <option value="Z">Z</option>
+                <option value="X">X</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Units</label>
+              <select id="gen-units" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="centimeters" selected>cm</option>
+                <option value="meters">m</option>
+                <option value="millimeters">mm</option>
+                <option value="inches">in</option>
+                <option value="feet">ft</option>
+              </select>
+            </div>
+          </div>
+          <button onclick="generateAsset()" id="gen-btn" class="w-full bg-blue-600 text-white py-2 rounded font-medium hover:bg-blue-700 transition flex items-center justify-center gap-2">
+            <span>Generate</span>
+            <span id="gen-spinner" class="hidden">...</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Refine Panel -->
+      <div id="refine-panel" class="bg-white rounded-lg shadow p-6 hidden">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Refine Asset</h2>
+        <p class="text-xs text-gray-500 mb-3">Refining: <span id="refine-asset-id" class="font-mono text-gray-700"></span></p>
+        <div class="space-y-3">
+          <textarea id="refine-feedback" rows="3" class="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Describe changes (e.g. 'make it twice as large and red')"></textarea>
+          <button onclick="refineAsset()" class="w-full bg-purple-600 text-white py-2 rounded font-medium hover:bg-purple-700 transition">Refine</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Middle: Asset List -->
+    <div class="lg:col-span-1">
+      <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-800">Assets</h2>
+          <button onclick="loadAssets()" class="text-sm text-blue-600 hover:underline">Refresh</button>
+        </div>
+        <div id="asset-list" class="space-y-2 max-h-[600px] overflow-y-auto">
+          <p class="text-sm text-gray-400 text-center py-4">No assets yet. Generate one!</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: Asset Detail -->
+    <div class="lg:col-span-1">
+      <div id="asset-detail" class="bg-white rounded-lg shadow p-6 hidden">
+        <h2 class="text-lg font-semibold text-gray-800 mb-4">Asset Detail</h2>
+        <div class="space-y-3">
+          <div>
+            <span class="text-xs font-medium text-gray-500">ID</span>
+            <p id="detail-id" class="font-mono text-xs text-gray-800 break-all"></p>
+          </div>
+          <div>
+            <span class="text-xs font-medium text-gray-500">Status</span>
+            <p id="detail-status"></p>
+          </div>
+          <div>
+            <span class="text-xs font-medium text-gray-500">Description</span>
+            <p id="detail-description" class="text-sm text-gray-700"></p>
+          </div>
+          <div>
+            <span class="text-xs font-medium text-gray-500">Created</span>
+            <p id="detail-created" class="text-sm text-gray-700"></p>
+          </div>
+          <div id="detail-completed-row" class="hidden">
+            <span class="text-xs font-medium text-gray-500">Completed</span>
+            <p id="detail-completed" class="text-sm text-gray-700"></p>
+          </div>
+          <div id="detail-parent-row" class="hidden">
+            <span class="text-xs font-medium text-gray-500">Refined From</span>
+            <p id="detail-parent" class="font-mono text-xs text-gray-700"></p>
+          </div>
+          <div id="detail-actions" class="hidden space-y-2 pt-2 border-t border-gray-100">
+            <a id="detail-download" href="#" download class="block w-full text-center bg-green-600 text-white py-2 rounded font-medium hover:bg-green-700 transition text-sm">
+              Download .usda
+            </a>
+            <button onclick="openRefinePanel()" class="w-full bg-purple-600 text-white py-2 rounded font-medium hover:bg-purple-700 transition text-sm">
+              Refine This Asset
+            </button>
+            <button id="drive-btn" onclick="exportToDrive()" class="w-full bg-emerald-600 text-white py-2 rounded font-medium hover:bg-emerald-700 transition text-sm">
+              Export to Google Drive
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<script>
+  let currentAssetId = null;
+  let apiKey = 'demo';
+
+  function getToken() { return localStorage.getItem('usdagent_token'); }
+  function setToken(t) { localStorage.setItem('usdagent_token', t); }
+  function clearToken() { localStorage.removeItem('usdagent_token'); }
+
+  function authHeaders() {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    headers['X-API-Key'] = apiKey;
+    return headers;
+  }
+
+  async function apiFetch(url, options = {}) {
+    options.headers = { ...authHeaders(), ...(options.headers || {}) };
+    const resp = await fetch(url, options);
+    if (resp.status === 401) {
+      showLoginModal();
+      throw new Error('Unauthorized');
+    }
+    return resp;
+  }
+
+  function showLoginModal() {
+    document.getElementById('login-modal').classList.remove('hidden');
+  }
+  function hideLoginModal() {
+    document.getElementById('login-modal').classList.add('hidden');
+  }
+
+  async function doLogin() {
+    const username = document.getElementById('login-username').value;
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    errEl.classList.add('hidden');
+
+    const resp = await fetch('/auth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ username, password }),
+    });
+    if (!resp.ok) {
+      errEl.textContent = 'Invalid credentials. Please try again.';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    const data = await resp.json();
+    setToken(data.access_token);
+    hideLoginModal();
+    updateUserBadge();
+    loadAssets();
+  }
+
+  function logout() {
+    clearToken();
+    document.getElementById('user-badge').classList.add('hidden');
+    document.getElementById('logout-btn').classList.add('hidden');
+  }
+
+  async function updateUserBadge() {
+    const token = getToken();
+    if (!token) return;
+    try {
+      const resp = await fetch('/auth/me', { headers: { Authorization: 'Bearer ' + token } });
+      if (resp.ok) {
+        const data = await resp.json();
+        const badge = document.getElementById('user-badge');
+        badge.textContent = 'Signed in as ' + data.username;
+        badge.classList.remove('hidden');
+        document.getElementById('logout-btn').classList.remove('hidden');
+      }
+    } catch (_) {}
+  }
+
+  function statusBadge(status) {
+    const colors = {
+      ready: 'bg-green-100 text-green-800',
+      generating: 'bg-yellow-100 text-yellow-800',
+      pending: 'bg-blue-100 text-blue-800',
+      error: 'bg-red-100 text-red-800',
+    };
+    const cls = colors[status] || 'bg-gray-100 text-gray-800';
+    return `<span class="px-2 py-0.5 rounded text-xs font-medium ${cls}">${status}</span>`;
+  }
+
+  async function loadAssets() {
+    try {
+      const resp = await apiFetch('/assets');
+      if (!resp.ok) return;
+      const assets = await resp.json();
+      renderAssetList(assets);
+    } catch (_) {}
+  }
+
+  function renderAssetList(assets) {
+    const el = document.getElementById('asset-list');
+    if (!assets.length) {
+      el.innerHTML = '<p class="text-sm text-gray-400 text-center py-4">No assets yet. Generate one!</p>';
+      return;
+    }
+    el.innerHTML = assets.slice().reverse().map(a => `
+      <div onclick="selectAsset('${a.id}')" class="cursor-pointer p-3 rounded border border-gray-200 hover:bg-gray-50 transition ${a.id === currentAssetId ? 'bg-blue-50 border-blue-300' : ''}">
+        <div class="flex items-center justify-between mb-1">
+          ${statusBadge(a.status)}
+          <span class="text-xs text-gray-400">${new Date(a.created_at).toLocaleTimeString()}</span>
+        </div>
+        <p class="text-sm text-gray-700 truncate">${a.description || '(no description)'}</p>
+        <p class="text-xs font-mono text-gray-400 truncate">${a.id}</p>
+      </div>
+    `).join('');
+  }
+
+  async function selectAsset(id) {
+    currentAssetId = id;
+    try {
+      const resp = await apiFetch('/assets/' + id);
+      if (!resp.ok) return;
+      const asset = await resp.json();
+      showAssetDetail(asset);
+      loadAssets(); // refresh list to update selection highlight
+    } catch (_) {}
+  }
+
+  function showAssetDetail(asset) {
+    document.getElementById('asset-detail').classList.remove('hidden');
+    document.getElementById('detail-id').textContent = asset.id;
+    document.getElementById('detail-status').innerHTML = statusBadge(asset.status);
+    document.getElementById('detail-description').textContent = asset.description || '—';
+    document.getElementById('detail-created').textContent = new Date(asset.created_at).toLocaleString();
+
+    if (asset.completed_at) {
+      document.getElementById('detail-completed').textContent = new Date(asset.completed_at).toLocaleString();
+      document.getElementById('detail-completed-row').classList.remove('hidden');
+    } else {
+      document.getElementById('detail-completed-row').classList.add('hidden');
+    }
+
+    if (asset.parent_id) {
+      document.getElementById('detail-parent').textContent = asset.parent_id;
+      document.getElementById('detail-parent-row').classList.remove('hidden');
+    } else {
+      document.getElementById('detail-parent-row').classList.add('hidden');
+    }
+
+    if (asset.status === 'ready') {
+      document.getElementById('detail-actions').classList.remove('hidden');
+      if (asset.url) {
+        document.getElementById('detail-download').href = '/assets/' + asset.id + '/download';
+        document.getElementById('detail-download').setAttribute('download', asset.id + '.usda');
+      }
+    } else {
+      document.getElementById('detail-actions').classList.add('hidden');
+    }
+
+    // Check if Drive is configured
+    checkDriveConfigured();
+  }
+
+  async function checkDriveConfigured() {
+    const btn = document.getElementById('drive-btn');
+    if (!btn) return;
+    // Attempt a drive check; if GOOGLE_CLIENT_ID not set, backend returns 501
+    // We just leave button enabled and handle gracefully on click
+  }
+
+  async function generateAsset() {
+    const description = document.getElementById('gen-description').value.trim();
+    if (!description) { alert('Please enter a description.'); return; }
+    const scale = parseFloat(document.getElementById('gen-scale').value) || 1.0;
+    const up_axis = document.getElementById('gen-up-axis').value;
+    const units = document.getElementById('gen-units').value;
+
+    const btn = document.getElementById('gen-btn');
+    const spinner = document.getElementById('gen-spinner');
+    btn.disabled = true;
+    spinner.classList.remove('hidden');
+
+    try {
+      const resp = await apiFetch('/assets', {
+        method: 'POST',
+        body: JSON.stringify({ description, options: { scale, up_axis, units } }),
+      });
+      if (!resp.ok) { alert('Failed to generate asset.'); return; }
+      const asset = await resp.json();
+      currentAssetId = asset.id;
+      showAssetDetail(asset);
+      loadAssets();
+    } catch (_) {
+    } finally {
+      btn.disabled = false;
+      spinner.classList.add('hidden');
+    }
+  }
+
+  function openRefinePanel() {
+    if (!currentAssetId) return;
+    document.getElementById('refine-panel').classList.remove('hidden');
+    document.getElementById('refine-asset-id').textContent = currentAssetId;
+    document.getElementById('refine-feedback').focus();
+  }
+
+  async function refineAsset() {
+    const feedback = document.getElementById('refine-feedback').value.trim();
+    if (!feedback) { alert('Please enter refinement feedback.'); return; }
+    if (!currentAssetId) return;
+
+    try {
+      const resp = await apiFetch('/assets/' + currentAssetId + '/refine', {
+        method: 'PATCH',
+        body: JSON.stringify({ feedback }),
+      });
+      if (!resp.ok) { alert('Failed to refine asset.'); return; }
+      const asset = await resp.json();
+      currentAssetId = asset.id;
+      document.getElementById('refine-panel').classList.add('hidden');
+      document.getElementById('refine-feedback').value = '';
+      showAssetDetail(asset);
+      loadAssets();
+    } catch (_) {}
+  }
+
+  async function exportToDrive() {
+    if (!currentAssetId) return;
+    // First try the drive export endpoint
+    try {
+      const resp = await apiFetch('/assets/' + currentAssetId + '/export/drive', { method: 'POST' });
+      if (resp.status === 501) {
+        alert('Google Drive is not configured. Set GOOGLE_CLIENT_ID to enable Drive integration.');
+        return;
+      }
+      if (resp.status === 401 || resp.status === 403) {
+        // Need Google auth — redirect
+        window.location.href = '/auth/google?next=' + encodeURIComponent(window.location.href);
+        return;
+      }
+      if (resp.ok) {
+        const data = await resp.json();
+        alert('Exported to Google Drive: ' + (data.file_id || 'success'));
+      } else {
+        alert('Export failed.');
+      }
+    } catch (_) {
+      alert('Export failed.');
+    }
+  }
+
+  // Init
+  updateUserBadge();
+  loadAssets();
+</script>
+</body>
+</html>
