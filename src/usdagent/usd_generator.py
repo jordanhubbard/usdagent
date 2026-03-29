@@ -106,7 +106,15 @@ def _generate_with_llm(asset_id: str, description: str, options: dict[str, Any])
     up_axis = options.get("up_axis", "Y")
     units = options.get("units", "centimeters")
     mpu = _units_to_meters(units)
-    prompt = f"Generate a USD asset for: {description}"
+    preserve_geometry = bool(options.get("preserve_geometry", False))
+    if preserve_geometry:
+        prompt = (
+            f"Refine an existing USD asset. Keep all geometry (prim types, sizes, "
+            f"positions) exactly as-is. Only update materials, colors, and surface "
+            f"details as needed. Feedback: {description}"
+        )
+    else:
+        prompt = f"Generate a USD asset for: {description}"
     if scale != 1.0:
         prompt += f" (scale all dimensions by {scale})"
     prompt += f" Use upAxis = \"{up_axis}\" and metersPerUnit = {mpu} in the layer metadata."

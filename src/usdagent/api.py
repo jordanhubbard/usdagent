@@ -182,10 +182,15 @@ async def refine_asset(
     # Build refined description combining parent context with new feedback
     refined_description = f"{req.feedback} (refined from: {parent.get('description', '')})"
 
+    # Build options — carry parent options forward, overlay refine options
+    parent_options = dict(parent.get("options") or {})
+    refine_opts = req.options.model_dump()
+    generation_options = {**parent_options, **refine_opts}
+
     # Run generation synchronously
     try:
         record["status"] = "generating"
-        out_path = generate_asset(new_id, refined_description, req.options.model_dump())
+        out_path = generate_asset(new_id, refined_description, generation_options)
         record["status"] = "ready"
         record["url"] = str(out_path)
         record["completed_at"] = datetime.now(tz=timezone.utc)
