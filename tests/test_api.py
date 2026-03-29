@@ -158,3 +158,26 @@ def test_refine_asset_not_ready():
         headers={"X-API-Key": "test"},
     )
     assert resp.status_code == 400
+
+
+def test_list_assets_empty():
+    """GET /assets should return a list (may be empty or have assets from prior tests)."""
+    resp = client.get("/assets", headers={"X-API-Key": "test"})
+    assert resp.status_code == 200
+    assert isinstance(resp.json(), list)
+
+
+def test_list_assets_after_create():
+    """GET /assets should include newly created assets."""
+    create_resp = client.post(
+        "/assets",
+        json={"description": "A yellow torus"},
+        headers={"X-API-Key": "test"},
+    )
+    assert create_resp.status_code == 202
+    asset_id = create_resp.json()["id"]
+
+    list_resp = client.get("/assets", headers={"X-API-Key": "test"})
+    assert list_resp.status_code == 200
+    ids = [a["id"] for a in list_resp.json()]
+    assert asset_id in ids

@@ -8,14 +8,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import pathlib
+
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from usdagent.usd_generator import generate_asset
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_TEMPLATES_DIR = pathlib.Path(__file__).parent / "templates"
+_templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 app = FastAPI(
     title="usdagent",
@@ -201,10 +206,20 @@ async def refine_asset(
     return AssetResponse(**record)
 
 
-@app.get("/ui")
-async def web_ui() -> FileResponse:
-    """Serve the polished single-page asset viewer UI."""
-    return FileResponse(_STATIC_DIR / "index.html")
+@app.get("/assets", response_model=list[AssetResponse])
+async def list_assets() -> list[AssetResponse]:
+    """List all assets."""
+    return [AssetResponse(**record) for record in _assets.values()]
+
+
+@app.get("/ui", response_class=HTMLResponse)
+async def web_ui(request: Request) -> HTMLResponse:
+    """Serve the Jinja2-rendered asset management UI."""
+    google_configured = bool(os.environ.get("GOOGLE_CLIENT_ID"))
+    return _templates.TemplateResponse(
+        "ui.html",
+        {"request": request, "google_configured": google_configured},
+    )
 
 
 @app.get("/assets/{asset_id}/file")
